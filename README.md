@@ -1,6 +1,6 @@
 # Incident Memory Agent
 
-An on-call assistant that compares a generic Groq response with one grounded in recalled Hindsight incident history. Engineers can record whether either suggestion worked. The memory panel shows the actual retrieved facts and source chunks supplied to the model, with cited IDs marked. Synthetic records and feedback are not verified operational truth. Always review suggestions before acting.
+An on-call assistant that compares a generic Groq response with one grounded in recalled Hindsight incident history. Engineers can record whether either suggestion worked. The memory panel shows the up to five retrieved facts supplied to the model (each trimmed to 400 characters), with cited IDs marked. Synthetic records and feedback are not verified operational truth. Always review suggestions before acting.
 
 ## Architecture
 
@@ -13,7 +13,7 @@ Browser <── answers + retrieved facts ────────────�
 Browser ── worked/failed + notes ──> FastAPI ─────┘
 ```
 
-Hindsight extracts and indexes facts from retained reports. On triage, `recall` retrieves relevant facts and source chunks; both go to the LLM, which is instructed to prefer relevant successful fixes, avoid failed ones and cite only retrieved IDs. Feedback is retained with the original alert, suggested fix and outcome; it can influence later recalls but ranking and learning are not guaranteed. `reflect` exists in the SDK but is not needed here. Inspired by the self-driving-agents pattern of persistent memory and learning from outcomes.
+Hindsight extracts and indexes facts from retained reports. On triage, `recall` retrieves relevant facts; up to five trimmed facts go to the LLM, which is instructed to prefer relevant successful fixes, avoid failed ones and cite only retrieved IDs. Feedback is retained with the original alert, suggested fix and outcome; it can influence later recalls but ranking and learning are not guaranteed. `reflect` exists in the SDK but is not needed here. Inspired by the self-driving-agents pattern of persistent memory and learning from outcomes.
 
 ## Setup
 
@@ -34,13 +34,13 @@ Open http://127.0.0.1:8000. `HINDSIGHT_BANK_ID` defaults to `incident-agent`; se
 ## Demo
 
 1. Load the example or paste an alert. With comparison checked, run triage to see generic and memory-backed answers side by side. Uncheck it for only the memory-backed answer.
-2. Inspect the exact recalled facts and optional source context. A cited marker means the model referenced that retrieved ID; it is not a guarantee of factual accuracy.
+2. Inspect the recalled fact excerpts. A cited marker means the model referenced that retrieved ID; it is not a guarantee of factual accuracy.
 3. Add notes and select worked or didn't work on an answer. Feedback is only reported saved after Hindsight accepts it.
 4. Start the scenario to replay five related alerts. The first offers a generic comparison, and later steps use memory. Add feedback between incidents to demonstrate learning. This writes to the configured bank; no outcomes are invented or automatically applied. Results may not improve monotonically, and a pre-seeded bank may provide memory on the first incident.
 
 ## Reliability and API notes
 
-The app uses the documented `hindsight-client` `Hindsight(base_url=..., api_key=..., timeout=...)`, `retain_batch(bank_id=..., items=..., retain_async=False)`, `retain(bank_id=..., content=..., context=..., retain_async=False)` and `recall(bank_id=..., query=..., include_chunks=True, ...)`. Hindsight recall failure or no results is visible and triage continues without evidence. Feedback failures are surfaced for retry. Groq uses JSON mode with validation and two attempts per model, falling back from `openai/gpt-oss-120b` to `qwen/qwen3-32b`. Model availability and Cloud permissions depend on the account. No real services are changed by this app. It has no authentication; run it locally or put it behind an authenticated gateway before exposing it.
+The app uses the documented `hindsight-client` `Hindsight(base_url=..., api_key=..., timeout=...)`, `retain_batch(bank_id=..., items=..., retain_async=False)`, `retain(bank_id=..., content=..., context=..., retain_async=False)` and `recall(bank_id=..., query=..., include_chunks=False, ...)`. Hindsight recall failure or no results is visible and triage continues without evidence. Feedback failures are surfaced for retry. Groq defaults to `openai/gpt-oss-120b`, falling back to `llama-3.3-70b-versatile`; configure these with `GROQ_PRIMARY_MODEL` and `GROQ_FALLBACK_MODEL`. It retries rate limits and invalid JSON once per model and retries without JSON mode if the model rejects it. Model availability and Cloud permissions depend on the account. No real services are changed by this app. It has no authentication; run it locally or put it behind an authenticated gateway before exposing it.
 
 Run tests: `python -m pytest -q` (mocked external services; no credentials needed). API docs are at `/docs`.
 
