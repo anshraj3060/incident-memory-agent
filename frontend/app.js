@@ -37,7 +37,10 @@ async function run() {
   running=true; $('triage').disabled=true; $('next').disabled=true; $('error').textContent=''; $('triage').textContent='Analyzing…';
   try {
     const compare=$('compare').checked;
-    const results=await Promise.all((compare ? [false,true] : [true]).map(memory=>post('/api/triage',{alert,memory})));
+    const results=[];
+    for (const memory of (compare ? [false,true] : [true])) {
+      results.push(await post('/api/triage',{alert,memory}));
+    }
     $('cards').replaceChildren(...results.map(r=>renderCard(r,alert))); $('results').hidden=false; $('results').scrollIntoView({behavior:'smooth',block:'start'});
   } catch(e){$('error').textContent=e.message;}
   finally{running=false;$('triage').disabled=false;$('next').disabled=false;$('triage').innerHTML='Run triage <span>→</span>';}
