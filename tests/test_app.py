@@ -41,3 +41,15 @@ def test_seed_fields():
     rows = incidents()
     assert len(rows) == 25
     assert all({'incident_id', 'service', 'error_log', 'severity', 'root_cause', 'resolution_steps', 'runbook', 'time_to_resolve_minutes', 'date', 'outcome'} <= row.keys() for row in rows)
+
+
+def test_recall_returns_facts_and_source_chunks(monkeypatch):
+    from types import SimpleNamespace
+    class Client:
+        def recall(self, **kwargs):
+            assert kwargs['include_chunks'] is True
+            return SimpleNamespace(results=[SimpleNamespace(id='fact-1', text='Rollback worked', chunk_id='chunk-1')], chunks={'chunk-1': SimpleNamespace(text='Incident SYN-001: rollback worked')})
+    monkeypatch.setattr(services, 'memory_client', lambda: Client())
+    memories, warning = services.recall('pool timeout')
+    assert warning is None
+    assert memories == [{'id': 'fact-1', 'text': 'Rollback worked', 'source': 'Incident SYN-001: rollback worked'}]

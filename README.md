@@ -42,6 +42,6 @@ Open http://127.0.0.1:8000. `HINDSIGHT_BANK_ID` defaults to `incident-agent`; se
 
 The app uses the documented `hindsight-client` `Hindsight(base_url=..., api_key=..., timeout=...)`, `retain_batch(bank_id=..., items=..., retain_async=False)`, `retain(bank_id=..., content=..., context=..., retain_async=False)` and `recall(bank_id=..., query=..., include_chunks=True, ...)`. Hindsight recall failure or no results is visible and triage continues without evidence. Feedback failures are surfaced for retry. Groq uses JSON mode with validation and two attempts per model, falling back from `openai/gpt-oss-120b` to `qwen/qwen3-32b`. Model availability and Cloud permissions depend on the account. No real services are changed by this app. It has no authentication; run it locally or put it behind an authenticated gateway before exposing it.
 
-Run tests: `pytest -q` (mocked external services; no credentials needed). API docs are at `/docs`.
+Run tests: `python -m pytest -q` (mocked external services; no credentials needed). API docs are at `/docs`.
 
 References: [Hindsight Python SDK](https://hindsight.vectorize.io/sdks/python), [Hindsight](https://github.com/vectorize-io/hindsight), [self-driving-agents](https://github.com/vectorize-io/self-driving-agents).
