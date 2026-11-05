@@ -24,16 +24,16 @@ def memory_client():
     url, key = os.getenv('HINDSIGHT_BASE_URL'), os.getenv('HINDSIGHT_API_KEY')
     if not url or not key:
         raise RuntimeError('Hindsight is not configured: set HINDSIGHT_BASE_URL and HINDSIGHT_API_KEY.')
-    return Hindsight(base_url=url, api_key=key, timeout=20.0)
+    return Hindsight(base_url=url, api_key=key, timeout=30.0)
 
 
 def bank():
     return os.getenv('HINDSIGHT_BANK_ID', 'incident-agent')
 
 
-def recall(alert):
+async def recall(alert):
     try:
-        response = memory_client().recall(bank_id=bank(), query=alert, max_tokens=4096, budget='mid', include_chunks=True, max_chunk_tokens=2000)
+        response = await memory_client().arecall(bank_id=bank(), query=alert, max_tokens=4096, budget='mid', include_chunks=True, max_chunk_tokens=2000)
         memories = []
         for index, result in enumerate(response.results):
             chunk = (response.chunks or {}).get(result.chunk_id) if result.chunk_id else None
@@ -44,8 +44,8 @@ def recall(alert):
         return [], 'Memory unavailable or timed out; the answer is generated without recalled evidence.'
 
 
-def retain(content):
-    memory_client().retain(bank_id=bank(), content=content, context='Incident response feedback', retain_async=False)
+async def retain(content):
+    await memory_client().aretain(bank_id=bank(), content=content, context='Incident response feedback', retain_async=False)
 
 
 def answer(alert, memories):
@@ -69,5 +69,5 @@ def answer(alert, memories):
                 result.based_on = [item for item in result.based_on if item in valid]
                 return result.model_dump()
             except Exception as exc:
-                log.warning('Groq model %s attempt %s failed: %s', model, attempt + 1, type(exc).__name__)
+                log.exception('Groq model %s attempt %s failed', model, attempt + 1)
     raise RuntimeError('Both Groq models failed to produce a valid response. Please retry.')
