@@ -1,3 +1,6 @@
+import asyncio
+from unittest.mock import AsyncMock
+
 from fastapi.testclient import TestClient
 from app.main import app
 from app import services
@@ -25,14 +28,16 @@ def test_memory_failure_degrades(monkeypatch):
 
 def test_feedback_includes_failure(monkeypatch):
     saved = []
-    monkeypatch.setattr(services, 'retain', saved.append)
+    async def save(content):
+        saved.append(content)
+    monkeypatch.setattr(services, 'retain', save)
     response = client.post('/api/feedback', json={'alert': 'pool timeout', 'suggestion': ANSWER, 'worked': False, 'notes': 'rollback did not help'})
     assert response.status_code == 200
     assert 'FAILED' in saved[0] and 'rollback did not help' in saved[0]
 
 
 def test_feedback_failure_and_validation(monkeypatch):
-    monkeypatch.setattr(services, 'retain', lambda _: (_ for _ in ()).throw(TimeoutError()))
+    monkeypatch.setattr(services, 'retain', AsyncMock(side_effect=TimeoutError()))
     assert client.post('/api/feedback', json={'alert': 'pool timeout', 'suggestion': ANSWER, 'worked': True}).status_code == 503
     assert client.post('/api/triage', json={'alert': '  '}).status_code == 422
 
@@ -46,10 +51,24 @@ def test_seed_fields():
 def test_recall_returns_facts_and_source_chunks(monkeypatch):
     from types import SimpleNamespace
     class Client:
-        def recall(self, **kwargs):
-            assert kwargs['include_chunks'] is True
-            return SimpleNamespace(results=[SimpleNamespace(id='fact-1', text='Rollback worked', chunk_id='chunk-1')], chunks={'chunk-1': SimpleNamespace(text='Incident SYN-001: rollback worked')})
-    monkeypatch.setattr(services, 'memory_client', lambda: Client())
-    memories, warning = services.recall('pool timeout')
+        arecall = AsyncMock(return_value=SimpleNamespace(results=[SimpleNamespace(id='fact-1', text='Rollback worked', chunk_id='chunk-1')], chunks={'chunk-1': SimpleNamespace(text='Incident SYN-001: rollback worked')}))
+    mock_client = Client()
+    monkeypatch.setattr(services, 'memory_client', lambda: mock_client)
+    memories, warning = asyncio.run(services.recall('pool timeout'))
+    mock_client.arecall.assert_awaited_once_with(bank_id=services.bank(), query='pool timeout', max_tokens=4096, budget='mid', include_chunks=True, max_chunk_tokens=2000)
     assert warning is None
     assert memories == [{'id': 'fact-1', 'text': 'Rollback worked', 'source': 'Incident SYN-001: rollback worked'}]
+
+
+def test_triage_and_feedback_await_client(monkeypatch):
+    from types import SimpleNamespace
+    memory = SimpleNamespace(
+        arecall=AsyncMock(return_value=SimpleNamespace(results=[], chunks={})),
+        aretain=AsyncMock(),
+    )
+    monkeypatch.setattr(services, 'memory_client', lambda: memory)
+    monkeypatch.setattr(services, 'answer', lambda alert, memories: ANSWER)
+    assert client.post('/api/triage', json={'alert': 'pool timeout'}).status_code == 200
+    memory.arecall.assert_awaited_once()
+    assert client.post('/api/feedback', json={'alert': 'pool timeout', 'suggestion': ANSWER, 'worked': True}).status_code == 200
+    memory.aretain.assert_awaited_once()

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import uuid
 from pathlib import Path
@@ -34,12 +35,12 @@ def index():
 
 
 @app.post('/api/triage')
-def triage(req: TriageRequest):
+async def triage(req: TriageRequest):
     if not req.alert.strip() or len(req.alert.strip()) < 5:
         raise HTTPException(422, 'Alert must contain at least 5 non-whitespace characters.')
-    memories, warning = services.recall(req.alert) if req.memory else ([], None)
+    memories, warning = await services.recall(req.alert) if req.memory else ([], None)
     try:
-        response = services.answer(req.alert, memories)
+        response = await asyncio.to_thread(services.answer, req.alert, memories)
     except Exception as exc:
         log.exception('Triage failed')
         raise HTTPException(502, str(exc) if isinstance(exc, RuntimeError) else 'Triage failed; please retry.') from exc
@@ -47,7 +48,7 @@ def triage(req: TriageRequest):
 
 
 @app.post('/api/feedback')
-def feedback(req: FeedbackRequest):
+async def feedback(req: FeedbackRequest):
     incident_id = 'feedback-' + uuid.uuid4().hex[:12]
     content = (f'Incident {incident_id}. Alert: {req.alert}\n'
                f'Suggested root cause: {req.suggestion.likely_root_cause}\n'
@@ -56,7 +57,7 @@ def feedback(req: FeedbackRequest):
                f'Engineer notes: {req.notes or "No notes provided"}. '
                'This is engineer feedback on a suggestion, not independently verified root cause.')
     try:
-        services.retain(content)
+        await services.retain(content)
     except Exception as exc:
         log.exception('Feedback retain failed')
         raise HTTPException(503, 'Could not save feedback to Hindsight. Please retry.') from exc
